@@ -1,4 +1,12 @@
 import { API_CONFIG } from './config';
+import { supabase } from './supabase';
+
+// Get current Supabase access token for API requests
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // Helper function to map document type to backend field name
 function getFieldNameForDocType(docType: string): string {
@@ -16,16 +24,19 @@ function getFieldNameForDocType(docType: string): string {
   }
 }
 
-// Generic API call function
+// Generic API call with auth token and 401 refresh/retry
 async function apiCall<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  isRetry = false
 ): Promise<T> {
   const url = API_CONFIG.getUrl(endpoint);
-  
-  const defaultHeaders = {
+  const authHeaders = await getAuthHeaders();
+
+  const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
-    'ngrok-skip-browser-warning': 'true', // Skip ngrok warning page
+    'ngrok-skip-browser-warning': 'true',
+    ...authHeaders,
   };
 
   const config: RequestInit = {
@@ -36,30 +47,40 @@ async function apiCall<T>(
     },
   };
 
-  try {
-    console.log('API Call to:', url);
-    const response = await fetch(url, config);
-    
-    console.log('Response status:', response.status);
-    const contentType = response.headers.get('content-type');
-    console.log('Content-Type:', contentType);
-    
-    // Check if response is JSON
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      console.error('Non-JSON response:', text.substring(0, 200));
-      throw new Error(`Server returned HTML instead of JSON. Check if backend is running at ${url}`);
-    }
-    
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('API Call Error:', error);
-    throw error;
+  const response = await fetch(url, config);
+  const contentType = response.headers.get('content-type');
+
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text();
+    console.error('Non-JSON response:', text.substring(0, 200));
+    throw new Error(`Server returned HTML instead of JSON. Check if backend is running at ${url}`);
   }
+
+  if (response.status === 401 && !isRetry) {
+    await supabase.auth.refreshSession();
+    return apiCall<T>(endpoint, options, true);
+  }
+
+  if (response.status === 401 && isRetry) {
+    await supabase.auth.signOut();
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'Session expired. Please sign in again.');
+  }
+
+  if (response.status === 403) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'Access denied.');
+  }
+
+  if (response.status === 503) {
+    throw new Error('Service temporarily unavailable. Please try again later.');
+  }
+
+  if (!response.ok) {
+    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
 }
 
 // Patient API functions
@@ -108,53 +129,52 @@ export const patientAPI = {
       });
     }
     
-    // Send FormData (don't set Content-Type, browser will set it with boundary)
-    try {
-      console.log('Sending request to:', url);
-      
-      const response = await fetch(url, {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+        ...authHeaders,
+      },
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Non-JSON response:', text.substring(0, 200));
+      throw new Error(`Server returned HTML instead of JSON. Check if backend is running at ${url}`);
+    }
+
+    if (response.status === 401) {
+      await supabase.auth.refreshSession();
+      const retryHeaders = await getAuthHeaders();
+      const retry = await fetch(url, {
         method: 'POST',
         body: formData,
-        headers: {
-          'ngrok-skip-browser-warning': 'true', // Skip ngrok warning page
-        },
+        headers: { 'ngrok-skip-browser-warning': 'true', ...retryHeaders },
       });
-      
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers.get('content-type'));
-      
-      // Check if response is JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text.substring(0, 200));
-        throw new Error(`Server returned HTML instead of JSON. Check if backend is running at ${url}`);
+      if (retry.status === 401) {
+        await supabase.auth.signOut();
+        throw new Error('Session expired. Please sign in again.');
       }
-      
-      if (!response.ok) {
-        // Try to parse validation errors from backend
-        const errorData = await response.json().catch(() => null);
-        
-        if (errorData?.detail && Array.isArray(errorData.detail)) {
-          // Format validation errors
-          const errors = errorData.detail.map((err: { loc: string[]; msg: string }) => {
-            const field = err.loc[err.loc.length - 1];
-            return `${field}: ${err.msg}`;
-          }).join('\n');
-          throw new Error(`Validation Error:\n${errors}`);
-        }
-        
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('API Error:', error.message);
-        throw error;
-      }
-      throw new Error('Unknown error occurred');
+      if (!retry.ok) throw new Error(`API Error: ${retry.status} ${retry.statusText}`);
+      return retry.json();
     }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      if (errorData?.detail && Array.isArray(errorData.detail)) {
+        const errors = errorData.detail.map((err: { loc: string[]; msg: string }) => {
+          const field = err.loc[err.loc.length - 1];
+          return `${field}: ${err.msg}`;
+        }).join('\n');
+        throw new Error(`Validation Error:\n${errors}`);
+      }
+      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
   },
 
   // Update patient
@@ -170,6 +190,13 @@ export const patientAPI = {
     return apiCall(`${API_CONFIG.ENDPOINTS.PATIENTS}/${id}`, {
       method: 'DELETE',
     });
+  },
+};
+
+// Auth API (verify token and get current user from backend)
+export const authAPI = {
+  getMe: async (): Promise<{ id: string; email: string; role: string }> => {
+    return apiCall(API_CONFIG.ENDPOINTS.AUTH_ME, { method: 'GET' });
   },
 };
 

@@ -4,6 +4,7 @@ import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 const validationSchema = Yup.object({
   email: Yup.string()
@@ -16,8 +17,10 @@ const validationSchema = Yup.object({
 
 export default function LoginPage() {
   const router = useRouter();
+  const { signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
 
   const formik = useFormik({
     initialValues: {
@@ -29,19 +32,21 @@ export default function LoginPage() {
       setIsLoading(true);
       setLoginError("");
 
-      // Simulate API call
-      setTimeout(() => {
-        // Demo credentials - in production, validate against backend
-        if (values.email === "admin@hospital.com" && values.password === "admin123") {
-          // Store auth token (in production, use proper auth)
-          localStorage.setItem("isAuthenticated", "true");
-          localStorage.setItem("userEmail", values.email);
-          router.push("/dashboard");
-        } else {
-          setLoginError("Invalid email or password");
-          setIsLoading(false);
+      try {
+        const { error } = isSignUp
+          ? await signUp(values.email, values.password)
+          : await signIn(values.email, values.password);
+
+        if (error) {
+          setLoginError(error.message || "Invalid email or password");
+          return;
         }
-      }, 1000);
+        router.push("/dashboard");
+      } catch {
+        setLoginError("Something went wrong. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
     },
   });
 
@@ -82,7 +87,7 @@ export default function LoginPage() {
                     ? "border-red-500 bg-red-50"
                     : "border-gray-300"
                 }`}
-                placeholder="admin@hospital.com"
+                placeholder="you@example.com"
               />
               {formik.touched.email && formik.errors.email && (
                 <p className="mt-2 text-sm text-red-600 flex items-center">
@@ -176,12 +181,23 @@ export default function LoginPage() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  Signing in...
+                  {isSignUp ? "Creating account..." : "Signing in..."}
                 </>
               ) : (
-                "Sign In"
+                isSignUp ? "Sign Up" : "Sign In"
               )}
             </button>
+
+            <p className="text-center text-sm text-gray-600">
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <button
+                type="button"
+                onClick={() => { setIsSignUp(!isSignUp); setLoginError(""); }}
+                className="font-medium text-blue-600 hover:text-blue-700"
+              >
+                {isSignUp ? "Sign in" : "Sign up"}
+              </button>
+            </p>
           </form>
         </div>
 

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavbarProps {
   title: string;
@@ -13,10 +14,10 @@ interface NavbarProps {
 export default function Navbar({ title, subtitle, setSidebarOpen, userEmail }: NavbarProps) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const { signOut } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("userEmail");
+    signOut();
     router.push("/login");
   };
 

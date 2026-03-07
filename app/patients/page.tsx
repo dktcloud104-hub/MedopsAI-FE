@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
 import AddPatientForm from "@/components/AddPatientForm";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { patientAPI } from "@/lib/api";
 
 type Patient = {
@@ -71,17 +73,18 @@ export default function PatientsPage() {
   const [viewingPdf, setViewingPdf] = useState<{ url: string; title: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [userEmail, setUserEmail] = useState("");
   const [activeDocTab, setActiveDocTab] = useState<'bills' | 'reports' | 'certificate' | 'discharge' | 'action' | 'insurer'>('bills');
 
-  useEffect(() => {
-    const email = localStorage.getItem("userEmail");
-    if (email) setUserEmail(email);
-  }, []);
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    fetchPatients();
-  }, []);
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user) fetchPatients();
+  }, [user]);
 
   const fetchPatients = async () => {
     try {
@@ -153,6 +156,15 @@ export default function PatientsPage() {
     patient.assigned_doctor.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+  if (!user) return null;
+
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-slate-900 flex overflow-x-hidden transition-colors duration-300">
@@ -171,7 +183,7 @@ export default function PatientsPage() {
           title="All Patients" 
           subtitle="View and manage patient records"
           setSidebarOpen={setSidebarOpen}
-          userEmail={userEmail}
+          userEmail={user?.email}
         />
 
         <main className="px-4 sm:px-6 lg:px-8 py-6">

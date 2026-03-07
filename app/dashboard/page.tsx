@@ -1,38 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-  const [userEmail, setUserEmail] = useState("");
+  const { user, loading, signOut } = useAuth();
 
   useEffect(() => {
-    const checkAuth = () => {
-      const authStatus = localStorage.getItem("isAuthenticated");
-      const email = localStorage.getItem("userEmail");
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [user, loading, router]);
 
-      if (authStatus === "true" && email) {
-        setUserEmail(email);
-        setMounted(true);
-      } else {
-        router.push("/login");
-      }
-    };
-
-    checkAuth();
-  }, [router]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("userEmail");
-    router.push("/login");
-  };
-
-  if (!mounted) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -43,9 +27,18 @@ export default function DashboardPage() {
     );
   }
 
+  if (!user) {
+    return null;
+  }
+
+  const handleLogout = () => {
+    signOut();
+    router.push("/login");
+  };
+
   return (
     <ThemeProvider>
-      <Dashboard userEmail={userEmail} onLogout={handleLogout} />
+      <Dashboard userEmail={user.email} onLogout={handleLogout} />
     </ThemeProvider>
   );
 }

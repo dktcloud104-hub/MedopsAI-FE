@@ -5,6 +5,7 @@ export const API_CONFIG = {
   // API Endpoints
   ENDPOINTS: {
     PATIENTS: '/patients',
+    AUTH_ME: '/auth/me',
   },
   
   // Helper function to get full URL

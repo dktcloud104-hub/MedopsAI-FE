@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
 import AddPatientForm from "@/components/AddPatientForm";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { patientAPI } from "@/lib/api";
 
 interface Patient {
@@ -25,20 +27,21 @@ export default function AppointmentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState("");
+
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    const email = localStorage.getItem("userEmail");
-    if (email) setUserEmail(email);
-  }, []);
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
 
   useEffect(() => {
     setCurrentDate(new Date());
   }, []);
 
   useEffect(() => {
-    fetchPatients();
-  }, []);
+    if (user) fetchPatients();
+  }, [user]);
 
   const fetchPatients = async () => {
     try {
@@ -167,6 +170,15 @@ export default function AppointmentsPage() {
     return colors[index % colors.length];
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+  if (!user) return null;
+
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-slate-900 flex overflow-x-hidden transition-colors duration-300">
@@ -185,7 +197,7 @@ export default function AppointmentsPage() {
           title="Patient Timeline" 
           subtitle="View patient admission and discharge schedule"
           setSidebarOpen={setSidebarOpen}
-          userEmail={userEmail}
+          userEmail={user?.email}
         />
 
         <main className="px-0 sm:px-6 lg:px-8 py-6">
