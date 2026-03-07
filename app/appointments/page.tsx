@@ -18,7 +18,8 @@ interface Patient {
 
 export default function AppointmentsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentDate, setCurrentDate] = useState(new Date());
+  // Use fixed initial date so server and client match (avoids hydration error), then sync to real date in useEffect
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date(2025, 0, 1));
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -29,6 +30,10 @@ export default function AppointmentsPage() {
   useEffect(() => {
     const email = localStorage.getItem("userEmail");
     if (email) setUserEmail(email);
+  }, []);
+
+  useEffect(() => {
+    setCurrentDate(new Date());
   }, []);
 
   useEffect(() => {

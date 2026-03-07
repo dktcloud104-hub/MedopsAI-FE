@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 type Theme = "light" | "dark";
 
@@ -12,30 +12,23 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    // Initialize theme from localStorage
-    if (typeof window !== "undefined") {
-      const savedTheme = localStorage.getItem("theme") as Theme;
-      if (savedTheme) {
-        // Add no-transition class on initial load to prevent flash
-        document.documentElement.classList.add("no-transition");
-        
-        if (savedTheme === "dark") {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
-        
-        // Remove no-transition class after a brief delay
-        setTimeout(() => {
-          document.documentElement.classList.remove("no-transition");
-        }, 100);
-        
-        return savedTheme;
+  // Always start with "light" so server and client match (avoids hydration error)
+  const [theme, setTheme] = useState<Theme>("light");
+
+  // After mount, read theme from localStorage and apply (client-only)
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme") as Theme | null;
+    if (savedTheme === "dark" || savedTheme === "light") {
+      document.documentElement.classList.add("no-transition");
+      if (savedTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
       }
+      setTheme(savedTheme);
+      setTimeout(() => document.documentElement.classList.remove("no-transition"), 100);
     }
-    return "light";
-  });
+  }, []);
 
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";

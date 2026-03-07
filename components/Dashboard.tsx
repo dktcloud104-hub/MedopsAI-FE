@@ -46,6 +46,12 @@ export default function Dashboard({ userEmail, onLogout }: DashboardProps) {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const patientsPerPage = 4;
+  // Set "today" in useEffect so server and client match (avoids hydration error)
+  const [today, setToday] = useState<string>("");
+
+  useEffect(() => {
+    setToday(new Date().toISOString().split("T")[0]);
+  }, []);
 
   useEffect(() => {
     fetchPatients();
@@ -95,8 +101,7 @@ export default function Dashboard({ userEmail, onLogout }: DashboardProps) {
     } else if (filterStatus === "Discharged") {
       matchesFilter = !!patient.dischargeDate;
     } else if (filterStatus === "Today") {
-      const today = new Date().toISOString().split('T')[0];
-      matchesFilter = patient.admissionDate === today;
+      matchesFilter = today ? patient.admissionDate === today : false;
     }
     
     return matchesSearch && matchesFilter;
@@ -117,10 +122,7 @@ export default function Dashboard({ userEmail, onLogout }: DashboardProps) {
     total: patients.length,
     admitted: patients.filter((p) => p.admissionDate && !p.dischargeDate).length,
     discharged: patients.filter((p) => p.dischargeDate).length,
-    newToday: patients.filter((p) => {
-      const today = new Date().toISOString().split('T')[0];
-      return p.admissionDate === today;
-    }).length,
+    newToday: today ? patients.filter((p) => p.admissionDate === today).length : 0,
   };
 
   const handleAddPatient = async (
