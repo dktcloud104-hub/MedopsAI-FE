@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { SidebarProvider } from "@/contexts/SidebarContext";
+import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +30,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
       >
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <SidebarProvider>
+            {children}
+            <Toaster position="top-right" />
+          </SidebarProvider>
+        </AuthProvider>
       </body>
     </html>
   );
